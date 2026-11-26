@@ -10,4 +10,27 @@ function bubble(text,who='bot'){const el=document.createElement('div');el.classN
 function command(raw){const t=raw.trim();if(!t)return;bubble(t,'user');const lower=t.toLocaleLowerCase('es-MX');if(lower==='ayuda'){bubble('Comandos: nota: [texto], brief, storyboard, exportar. La generación con IA se habilitará al conectar el agente.');return}if(lower==='exportar'){$('export').click();bubble('Solicitud de exportación iniciada.');return}if(lower==='brief'){if(state.nodes.length>=40){bubble('El lienzo está lleno.');return}$('brief').click();bubble('Brief añadido al lienzo.');return}if(lower.includes('storyboard')){if(state.nodes.length>34){bubble('Necesitas seis espacios libres para el storyboard.');return}for(let i=1;i<=6;i++)add('note','Escena '+i+'\nPlano: \nAcción: \nAudio: ');bubble('Añadí seis tarjetas editables como plantilla de storyboard. No he generado imágenes ni video.');return}if(state.nodes.length>=40){bubble('El lienzo está lleno.');return}add('note',lower.startsWith('nota:')?t.slice(5).trim():t);bubble('Guardé tu idea como nota en el lienzo. Puedes editarla o moverla. El agente de IA todavía no está conectado.')}
 $('chatForm').addEventListener('submit',e=>{e.preventDefault();command($('chatText').value);$('chatText').value=''});document.querySelectorAll('.example').forEach(b=>b.addEventListener('click',()=>{$('heroPrompt').value=b.dataset.example;$('heroPrompt').focus()}));$('startCreative').onclick=()=>{const t=$('heroPrompt').value.trim();if(t){state.goal=t.slice(0,2000);sync();save();command(t)}$('workspace').scrollIntoView({behavior:'smooth'})};
 
+
+if(location.pathname==='/telar'||location.pathname==='/telar/'){
+  const status=document.querySelector('.right .status');
+  if(status){status.replaceChildren();const title=document.createElement('strong');title.textContent='Pope Bot · asistente privado';const detail=document.createElement('small');detail.textContent='Usa el modelo configurado en Pope Bot. Las acciones del lienzo requieren confirmación.';status.append(title,detail)}
+  document.querySelector('.chathelp').textContent='Conexión al modelo de Pope Bot. Sin acceso a código, credenciales ni publicaciones.';
+  $('chatlog').replaceChildren();bubble('Hola. Soy tu asistente creativo de TELAR. Cuéntame qué quieres crear.');
+  const history=[];let pending=false;
+  command=async function(raw){
+    const message=raw.trim();if(!message||pending)return;
+    pending=true;bubble(message,'user');$('chatForm').querySelector('button').disabled=true;
+    try{
+      const res=await fetch('/api/telar',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({message,context:Object.fromEntries(fields.map(k=>[k,state[k]])),history:history.slice(-8)})});
+      if(!res.ok)throw Error('HTTP '+res.status);
+      const result=await res.json();if(typeof result.reply!=='string'||!['none','note','brief','storyboard'].includes(result.action)||!Array.isArray(result.cards)||result.cards.length>6||result.cards.some(c=>typeof c!=='string'))throw Error('Respuesta no válida');
+      bubble(result.reply);history.push({role:'user',text:message},{role:'assistant',text:result.reply});
+      if(result.action!=='none'&&result.cards.length){
+        const btn=document.createElement('button');btn.textContent='Añadir '+result.cards.length+' al lienzo';btn.className='primary';btn.onclick=()=>{if(state.nodes.length+result.cards.length>40){bubble('No hay espacio suficiente en el lienzo.');return}result.cards.forEach(c=>add(result.action==='brief'?'brief':'note',c));btn.disabled=true;bubble('Tarjetas añadidas al lienzo.')};$('chatlog').append(btn);
+      }
+    }catch(e){bubble('No se pudo conectar con el asistente ('+e.message+'). Revisa la sesión y la configuración de Pope Bot.')}
+    finally{pending=false;$('chatForm').querySelector('button').disabled=false}
+  };
+}
+
 </script></body></html>
